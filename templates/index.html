@@ -1,9 +1,27 @@
-
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Задачи</title>
+    <style>
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f0f0f0;
+            cursor: move;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        li.dragging {
+            opacity: 0.5;
+        }
+    </style>
 </head>
 <body>
     <h1>Список задач</h1>
@@ -13,9 +31,9 @@
         <button type="submit">Добавить</button>
     </form>
 
-    <ul>
+    <ul id="taskList">
         {{range .Tasks}}
-            <li>
+            <li draggable="true" data-id="{{.ID}}">
                 {{.Title}} 
                 {{if not .Done}}
                     <form method="POST" action="/done" style="display:inline">
@@ -28,5 +46,50 @@
             </li>
         {{end}}
     </ul>
+
+    <script>
+        const tasks = document.querySelectorAll("li");
+
+        tasks.forEach(task => {
+            task.addEventListener("dragstart", (e) => {
+                task.classList.add("dragging");
+                e.dataTransfer.setData("text", task.dataset.id);
+            });
+
+            task.addEventListener("dragend", () => {
+                task.classList.remove("dragging");
+            });
+
+            task.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                const draggingTask = document.querySelector(".dragging");
+                const currentTask = task;
+                const list = currentTask.parentNode;
+                const afterElement = getDragAfterElement(list, e.clientY);
+                if (afterElement == null) {
+                    list.appendChild(draggingTask);
+                } else {
+                    list.insertBefore(draggingTask, afterElement);
+                }
+            });
+        });
+
+        function getDragAfterElement(list, y) {
+            const draggableElements = [...list.querySelectorAll("li:not(.dragging)")];
+
+            return draggableElements.reduce(
+                (closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset: offset, element: child };
+                    } else {
+                        return closest;
+                    }
+                },
+                { offset: Number.NEGATIVE_INFINITY }
+            ).element;
+        }
+    </script>
 </body>
 </html>
