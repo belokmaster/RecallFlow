@@ -1,88 +1,126 @@
 package main
 
 import (
+	"bufio"
 	"database/sql"
-	"html/template"
+	"fmt"
 	"log"
-	"net/http"
+	"os"
+	"strings"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq"
 )
 
-type Task struct {
-	ID    int
-	Title string
-	Done  bool
+type Config struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	DBName   string
+	SSLMode  string
 }
 
-var db *sql.DB
-var tmpl = template.Must(template.ParseFiles("templates/index.html"))
+func ReadConfig(filename string) (*Config, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("cannot open file %s: %v", filename, err)
+	}
+	defer file.Close()
+
+	config := &Config{}
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// пустрая строка и комменты пропускаются
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// парсим на ключ и value
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "host":
+			config.Host = value
+		case "port":
+			config.Port = value
+		case "user":
+			config.User = value
+		case "password":
+			config.Password = value
+		case "dbname":
+			config.DBName = value
+		case "sslmode":
+			config.SSLMode = value
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("problem with reading file: %v", err)
+	}
+
+	return config, nil
+}
+
+func (c *Config) ConnectionString() string {
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode)
+}
+
+var DB *sql.DB
+
+func createTables(db *sql.DB) error {
+	query := `
+		CREATE TABLE IF NOT EXISTS task (
+			id SERIAL PRIMARY KEY,
+			title VARCHAR(250) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			next_review_date TIMESTAMP NOT NULL
+		);
+	`
+
+	_, err := db.Exec(query)
+	return err
+}
+
+func InitDB(path string) error {
+	config, err := ReadConfig(path)
+	if err != nil {
+		return fmt.Errorf("problem with gettig config: %v", err)
+	}
+	configString := config.ConnectionString()
+
+	db, err := sql.Open("postgres", configString)
+	if err != nil {
+		return fmt.Errorf("problem with connecting to db: %v", err)
+	}
+
+	err = db.Ping()
+	if err != nil {
+		return fmt.Errorf("problem with ping db: %v", err)
+	}
+
+	err = createTables(db)
+	if err != nil {
+		return fmt.Errorf("problem with creating db: %v", err)
+	}
+
+	DB = db // глобальная переменная конечно не круто но че поделать
+	log.Println("DB sucessfully inizializated")
+	return nil
+}
 
 func main() {
-	var err error
-	db, err = sql.Open("sqlite", "tasks.db")
+	path := "text.txt"
+	err := InitDB(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("problem with init db: %v", err)
 	}
-
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        done BOOLEAN NOT NULL DEFAULT FALSE
-    )`)
-	if err != nil {
-		log.Fatal("Ошибка создания таблицы:", err)
-	}
-
-	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/add", addHandler)
-	http.HandleFunc("/done", doneHandler)
-
-	log.Println("Сервер запущен на http://localhost:8080")
-	http.ListenAndServe(":8080", nil)
-}
-
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, title, done FROM tasks")
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var t Task
-		if err := rows.Scan(&t.ID, &t.Title, &t.Done); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		tasks = append(tasks, t)
-	}
-
-	tmpl.Execute(w, map[string]interface{}{"Tasks": tasks})
-}
-
-func addHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		title := r.FormValue("title")
-		_, err := db.Exec("INSERT INTO tasks (title) VALUES (?)", title)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-func doneHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		id := r.FormValue("id")
-		_, err := db.Exec("UPDATE tasks SET done = TRUE WHERE id = ?", id)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	defer DB.Close()
 }

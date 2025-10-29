@@ -1,0 +1,6 @@
+*.exe
+*.out
+*.cache
+*.db
+*.txt
+*.log
