@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"bufio"
@@ -7,17 +7,47 @@ import (
 	"log"
 	"os"
 	"strings"
-
-	_ "github.com/lib/pq"
 )
 
-type Config struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
+func CreateTables(db *sql.DB) error {
+	query := `
+		CREATE TABLE IF NOT EXISTS task (
+			id SERIAL PRIMARY KEY,
+			title VARCHAR(250) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			next_review_date TIMESTAMP NOT NULL
+		);
+	`
+
+	_, err := db.Exec(query)
+	return err
+}
+
+func InitDB(path string) error {
+	config, err := ReadConfig(path)
+	if err != nil {
+		return fmt.Errorf("problem with gettig config: %v", err)
+	}
+	connStr := config.ConnectionString()
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return fmt.Errorf("problem with connecting to db: %v", err)
+	}
+
+	err = db.Ping()
+	if err != nil {
+		return fmt.Errorf("problem with ping db: %v", err)
+	}
+
+	err = CreateTables(db)
+	if err != nil {
+		return fmt.Errorf("problem with creating db: %v", err)
+	}
+
+	DB = db // глобальная переменная конечно не круто но че поделать
+	log.Println("DB sucessfully inizializated")
+	return nil
 }
 
 func ReadConfig(filename string) (*Config, error) {
@@ -71,56 +101,4 @@ func ReadConfig(filename string) (*Config, error) {
 
 func (c *Config) ConnectionString() string {
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode)
-}
-
-var DB *sql.DB
-
-func createTables(db *sql.DB) error {
-	query := `
-		CREATE TABLE IF NOT EXISTS task (
-			id SERIAL PRIMARY KEY,
-			title VARCHAR(250) NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			next_review_date TIMESTAMP NOT NULL
-		);
-	`
-
-	_, err := db.Exec(query)
-	return err
-}
-
-func InitDB(path string) error {
-	config, err := ReadConfig(path)
-	if err != nil {
-		return fmt.Errorf("problem with gettig config: %v", err)
-	}
-	configString := config.ConnectionString()
-
-	db, err := sql.Open("postgres", configString)
-	if err != nil {
-		return fmt.Errorf("problem with connecting to db: %v", err)
-	}
-
-	err = db.Ping()
-	if err != nil {
-		return fmt.Errorf("problem with ping db: %v", err)
-	}
-
-	err = createTables(db)
-	if err != nil {
-		return fmt.Errorf("problem with creating db: %v", err)
-	}
-
-	DB = db // глобальная переменная конечно не круто но че поделать
-	log.Println("DB sucessfully inizializated")
-	return nil
-}
-
-func main() {
-	path := "text.txt"
-	err := InitDB(path)
-	if err != nil {
-		log.Fatalf("problem with init db: %v", err)
-	}
-	defer DB.Close()
 }
