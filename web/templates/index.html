@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание задачи</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .req {
+            color: #ff0019
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: Arial, sans-serif;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: #4783c5;
+            outline: none;
+        }
+
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #4783c5;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            margin-top: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover {
+            background: #0c64c1;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .message {
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Создать новую задачу</h1>
+
+        <form id="taskForm">
+            <div class="form-group">
+                <label for="title">Название задачи <span class="req">*</span></label>
+                <input type="text" id="title" name="title" required maxlength="250"
+                    placeholder="Введите название задачи">
+            </div>
+
+            <div class="form-group">
+                <label for="description">Описание</label>
+                <textarea id="description" name="description"
+                    placeholder="Введите описание задачи (необязательно)"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="next_review_date">Дата следующего повторения <span class="req">*</span></label>
+                <input type="datetime-local" id="next_review_date" name="next_review_date" required>
+            </div>
+
+            <button type="submit" id="submitBtn">Сохранить задачу</button>
+        </form>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        document.getElementById('taskForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const messageDiv = document.getElementById('message');
+
+            const formData = {
+                title: document.getElementById('title').value.trim(),
+                description: document.getElementById('description').value.trim(),
+                next_review_date: document.getElementById('next_review_date').value
+            };
+
+            if (!formData.title) {
+                showMessage('Пожалуйста, введите название задачи', 'error');
+                return;
+            }
+
+            if (!formData.next_review_date) {
+                showMessage('Пожалуйста, выберите дату повторения', 'error');
+                return;
+            }
+
+            if (!formData.description) {
+                formData.description = null;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Создаём задачу...';
+
+            try {
+                const response = await fetch('/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(`Задача "${result.task.title}" успешно создана! ID: ${result.task.id}`, 'success');
+                    document.getElementById('taskForm').reset();
+                } else {
+                    showMessage(`Ошибка: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showMessage('Ошибка сети: ' + error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Сохранить задачу';
+            }
+        });
+
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = 'block';
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('next_review_date').min = now.toISOString().slice(0, 16);
+
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('next_review_date').value = tomorrow.toISOString().slice(0, 16);
+    </script>
+</body>
+
+</html>
