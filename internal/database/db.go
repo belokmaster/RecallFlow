@@ -43,9 +43,23 @@ func CreateTables(db *sql.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			next_review_date TIMESTAMP NOT NULL
 		);
+
+		CREATE TABLE IF NOT EXISTS succeeded_task (
+			id SERIAL PRIMARY KEY,
+			task_id INTEGER NOT NULL,
+			title VARCHAR(250) NOT NULL,
+			description TEXT,
+			completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
 	`
 
 	_, err := db.Exec(query)
+	return err
+}
+
+func UpdateTaskNextReviewDate(db *sql.DB, id int, newDate string) error {
+	query := "UPDATE task SET next_review_date = $1 WHERE id = $2"
+	_, err := db.Exec(query, newDate, id)
 	return err
 }
 
@@ -69,6 +83,80 @@ func GetAllTasks(db *sql.DB) ([]Task, error) {
 		tasks = append(tasks, task)
 	}
 
+	return tasks, nil
+}
+
+func CompleteTask(db *sql.DB, taskID int) error {
+	fmt.Printf("CompleteTask - Starting for task ID: %d\n", taskID)
+
+	// Сначала получаем задачу
+	task, err := GetTaskByID(db, taskID)
+	if err != nil {
+		fmt.Printf("CompleteTask - Error getting task: %v\n", err)
+		return err
+	}
+	fmt.Printf("CompleteTask - Task to complete: ID=%d, Title=%s\n", task.ID, task.Title)
+
+	// Вставляем в succeeded_task
+	query := `
+        INSERT INTO succeeded_task (task_id, title, description) 
+        VALUES ($1, $2, $3)
+    `
+	fmt.Printf("CompleteTask - Inserting into succeeded_task...\n")
+	result, err := db.Exec(query, task.ID, task.Title, task.Description)
+	if err != nil {
+		fmt.Printf("CompleteTask - Error inserting into succeeded_task: %v\n", err)
+		return err
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	fmt.Printf("CompleteTask - Inserted into succeeded_task, rows affected: %d\n", rowsAffected)
+
+	// Удаляем из task
+	fmt.Printf("CompleteTask - Deleting from task table...\n")
+	result, err = db.Exec("DELETE FROM task WHERE id = $1", taskID)
+	if err != nil {
+		fmt.Printf("CompleteTask - Error deleting from task: %v\n", err)
+		return err
+	}
+
+	rowsAffected, _ = result.RowsAffected()
+	fmt.Printf("CompleteTask - Deleted from task, rows affected: %d\n", rowsAffected)
+
+	fmt.Printf("CompleteTask - Successfully completed task %d\n", taskID)
+	return nil
+}
+
+func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
+	fmt.Printf("GetSucceededTasks - Fetching succeeded tasks\n")
+
+	query := "SELECT id, task_id, title, description, completed_at FROM succeeded_task ORDER BY completed_at DESC"
+	rows, err := db.Query(query)
+	if err != nil {
+		fmt.Printf("GetSucceededTasks - Error querying: %v\n", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []SucceededTask
+	for rows.Next() {
+		var task SucceededTask
+		var description sql.NullString
+
+		err := rows.Scan(&task.ID, &task.TaskID, &task.Title, &description, &task.CompletedAt)
+		if err != nil {
+			fmt.Printf("GetSucceededTasks - Error scanning row: %v\n", err)
+			return nil, err
+		}
+
+		if description.Valid {
+			task.Description = &description.String
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	fmt.Printf("GetSucceededTasks - Found %d succeeded tasks\n", len(tasks))
 	return tasks, nil
 }
 

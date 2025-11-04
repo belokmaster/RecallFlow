@@ -141,6 +141,21 @@
         <div id="message" class="message"></div>
     </div>
 
+    <div style="text-align: center; margin: 20px 0;">
+        <button onclick="loadTasks()"
+            style="padding: 10px 20px; background: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Обновить список задач
+        </button>
+    </div>
+
+    <div class="tasks-container" style="max-width: 800px; margin: 40px auto;">
+        <h2 style="text-align: center; margin-bottom: 30px;">Активные задачи</h2>
+        <div id="tasksList"></div>
+
+        <h2 style="text-align: center; margin: 40px 0 30px 0;">Выполненные задачи</h2>
+        <div id="succeededTasksList"></div>
+    </div>
+
     <script>
         document.getElementById('taskForm').addEventListener('submit', async function (e) {
             e.preventDefault();
@@ -216,6 +231,184 @@
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
         document.getElementById('next_review_date').value = tomorrow.toISOString().slice(0, 16);
+
+        // Функция для загрузки задач
+        async function loadTasks() {
+            try {
+                console.log('Loading tasks...');
+                const response = await fetch('/tasks');
+                const result = await response.json();
+
+                if (response.ok) {
+                    console.log('Active tasks:', result.tasks);
+                    console.log('Succeeded tasks:', result.succeeded_tasks);
+
+                    displayTasks(result.tasks || []);
+                    displaySucceededTasks(result.succeeded_tasks || []);
+                } else {
+                    console.error('Error loading tasks:', result.error);
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+            }
+        }
+
+        // Отображение активных задач
+        function displayTasks(tasks) {
+            const tasksList = document.getElementById('tasksList');
+
+            if (tasks.length === 0) {
+                tasksList.innerHTML = '<p style="text-align: center; color: #666;">Нет активных задач</p>';
+                return;
+            }
+
+            tasksList.innerHTML = tasks.map(task => `
+            <div class="task-item" style="background: white; padding: 20px; margin-bottom: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                <h3 style="margin-bottom: 10px; color: #333;">${escapeHtml(task.title)}</h3>
+                ${task.description ? `<p style="margin-bottom: 15px; color: #666;">${escapeHtml(task.description)}</p>` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <small style="color: #888;">Создана: ${formatDate(task.created_at)}</small><br>
+                        <small style="color: #888;">След. повторение: ${formatDate(task.next_review_date)}</small>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="rescheduleTask(${task.id})" style="padding: 8px 16px; background: #ffc107; color: black; border: none; border-radius: 5px; cursor: pointer;">
+                            Перенести
+                        </button>
+                        <button onclick="completeTask(${task.id})" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            Выполнено
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        }
+
+        // Отображение выполненных задач
+        function displaySucceededTasks(tasks) {
+            const succeededTasksList = document.getElementById('succeededTasksList');
+
+            if (tasks.length === 0) {
+                succeededTasksList.innerHTML = '<p style="text-align: center; color: #666;">Нет выполненных задач</p>';
+                return;
+            }
+
+            succeededTasksList.innerHTML = tasks.map(task => `
+            <div class="succeeded-task-item" style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
+                <h4 style="margin-bottom: 5px; color: #333;">${escapeHtml(task.title)}</h4>
+                ${task.description ? `<p style="margin-bottom: 10px; color: #666; font-size: 0.9em;">${escapeHtml(task.description)}</p>` : ''}
+                <small style="color: #888;">Выполнена: ${formatDate(task.completed_at)}</small>
+            </div>
+        `).join('');
+        }
+
+        // Перенос даты задачи
+        async function rescheduleTask(taskId) {
+            console.log('Перенос задачи ID:', taskId);
+
+            // Устанавливаем дату по умолчанию - завтра в это же время
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const defaultDate = tomorrow.toISOString().slice(0, 16);
+
+            const newDate = prompt('Введите новую дату и время (формат: ГГГГ-ММ-ДДTЧЧ:ММ):', defaultDate);
+            if (!newDate) {
+                console.log('Пользователь отменил ввод');
+                return;
+            }
+
+            console.log('Новая дата:', newDate);
+            console.log('URL:', `/tasks/${taskId}`);
+
+            try {
+                const response = await fetch(`/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ new_date: newDate })
+                });
+
+                console.log('Статус ответа:', response.status);
+                const result = await response.json();
+                console.log('Результат:', result);
+
+                if (response.ok && result.success) {
+                    showMessage('Дата успешно обновлена!', 'success');
+                    loadTasks(); // Перезагружаем список
+                } else {
+                    showMessage('Ошибка: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка сети:', error);
+                showMessage('Ошибка сети: ' + error.message, 'error');
+            }
+        }
+
+        // Завершение задачи
+        async function completeTask(taskId) {
+            console.log('CompleteTask - Task ID:', taskId);
+
+            if (!confirm('Вы уверены, что хотите отметить задачу как выполненную?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/tasks/complete/${taskId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const result = await response.json();
+                console.log('Server response:', result);
+
+                if (response.ok && result.success) {
+                    console.log('Task completed successfully');
+                    showMessage('Задача отмечена как выполненная!', 'success');
+
+                    // Ждем и обновляем список
+                    setTimeout(() => {
+                        console.log('Reloading tasks...');
+                        loadTasks();
+                    }, 1000);
+
+                } else {
+                    console.error('Error:', result.error);
+                    showMessage('Ошибка: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+                showMessage('Ошибка сети: ' + error.message, 'error');
+            }
+        }
+
+        // Вспомогательные функции
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('ru-RU');
+        }
+
+        // Загружаем задачи при загрузке страницы
+        document.addEventListener('DOMContentLoaded', loadTasks);
+
+        // Обновляем список задач после создания новой
+        const originalFormSubmit = document.getElementById('taskForm').onsubmit;
+        document.getElementById('taskForm').onsubmit = async function (e) {
+            await originalFormSubmit?.call(this, e);
+            // Если форма была отправлена успешно, обновляем список
+            setTimeout(loadTasks, 500);
+        };
     </script>
 </body>
 

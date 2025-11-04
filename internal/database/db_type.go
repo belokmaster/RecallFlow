@@ -13,4 +13,12 @@ type Task struct {
 	NextReviewDate time.Time `json:"next_review_date"`
 }
 
+type SucceededTask struct {
+	ID          int     `json:"id"`
+	TaskID      int     `json:"task_id"`
+	Title       string  `json:"title"`
+	Description *string `json:"description"`
+	CompletedAt string  `json:"completed_at"`
+}
+
 var DB *sql.DB
