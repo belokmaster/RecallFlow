@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"time"
 )
 
@@ -14,11 +13,9 @@ type Task struct {
 }
 
 type SucceededTask struct {
-	ID          int     `json:"id"`
-	TaskID      int     `json:"task_id"`
-	Title       string  `json:"title"`
-	Description *string `json:"description"`
-	CompletedAt string  `json:"completed_at"`
+	ID          int       `json:"id"`
+	TaskID      int       `json:"task_id"`
+	Title       string    `json:"title"`
+	Description *string   `json:"description"`
+	CompletedAt time.Time `json:"completed_at"`
 }
-
-var DB *sql.DB

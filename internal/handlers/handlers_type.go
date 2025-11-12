@@ -1,6 +1,11 @@
 package handlers
 
-import "reccal_flow/internal/database"
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"reccal_flow/internal/database"
+)
 
 type CreateTaskRequest struct {
 	Title          string  `json:"title"`
@@ -26,4 +31,22 @@ type UpdateTaskDateRequest struct {
 type TaskActionResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
+}
+
+func respondWithError(w http.ResponseWriter, code int, message string) {
+	log.Printf("Отправка ошибки: код %d, сообщение: %s", code, message)
+	respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	response, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Критическая ошибка: не удалось закодировать JSON: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(response)
 }

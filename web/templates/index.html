@@ -169,6 +169,10 @@
                 next_review_date: document.getElementById('next_review_date').value
             };
 
+            if (formData.next_review_date.length === 16) {
+                formData.next_review_date += ':00';
+            }
+
             if (!formData.title) {
                 showMessage('Пожалуйста, введите название задачи', 'error');
                 return;
@@ -198,8 +202,10 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    showMessage(`Задача "${result.task.title}" успешно создана! ID: ${result.task.id}`, 'success');
+                    showMessage(`Задача "${result.title}" успешно создана!`, 'success');
                     document.getElementById('taskForm').reset();
+                    setDefaultDate(); // Сбросим дату на завтра
+                    loadTasks(); // Обновляем список задач
                 } else {
                     showMessage(`Ошибка: ${result.error}`, 'error');
                 }
@@ -217,20 +223,20 @@
             messageDiv.className = `message ${type}`;
             messageDiv.style.display = 'block';
 
-            if (type === 'success') {
-                setTimeout(() => {
-                    messageDiv.style.display = 'none';
-                }, 5000);
-            }
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
         }
 
-        const now = new Date();
-        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        document.getElementById('next_review_date').min = now.toISOString().slice(0, 16);
+        function setDefaultDate() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('next_review_date').min = now.toISOString().slice(0, 16);
 
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        document.getElementById('next_review_date').value = tomorrow.toISOString().slice(0, 16);
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('next_review_date').value = tomorrow.toISOString().slice(0, 16);
+        }
 
         // Функция для загрузки задач
         async function loadTasks() {
@@ -306,19 +312,20 @@
         async function rescheduleTask(taskId) {
             console.log('Перенос задачи ID:', taskId);
 
-            // Устанавливаем дату по умолчанию - завтра в это же время
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            const defaultDate = tomorrow.toISOString().slice(0, 16);
+            const defaultDate = tomorrow.toISOString().slice(0, 16) + ':00'; // Добавляем секунды
 
-            const newDate = prompt('Введите новую дату и время (формат: ГГГГ-ММ-ДДTЧЧ:ММ):', defaultDate);
-            if (!newDate) {
+            const newDateStr = prompt('Введите новую дату и время (формат: ГГГГ-ММ-ДДTЧЧ:ММ):', tomorrow.toISOString().slice(0, 16));
+            if (!newDateStr) {
                 console.log('Пользователь отменил ввод');
                 return;
             }
 
+            // Добавляем секунды, если их нет
+            const newDate = newDateStr.length === 16 ? newDateStr + ':00' : newDateStr;
+
             console.log('Новая дата:', newDate);
-            console.log('URL:', `/tasks/${taskId}`);
 
             try {
                 const response = await fetch(`/tasks/${taskId}`, {
@@ -354,7 +361,7 @@
             }
 
             try {
-                const response = await fetch(`/tasks/complete/${taskId}`, {
+                const response = await fetch(`/tasks/${taskId}/complete`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -367,13 +374,7 @@
                 if (response.ok && result.success) {
                     console.log('Task completed successfully');
                     showMessage('Задача отмечена как выполненная!', 'success');
-
-                    // Ждем и обновляем список
-                    setTimeout(() => {
-                        console.log('Reloading tasks...');
-                        loadTasks();
-                    }, 1000);
-
+                    loadTasks(); // Обновляем список
                 } else {
                     console.error('Error:', result.error);
                     showMessage('Ошибка: ' + result.error, 'error');
@@ -384,8 +385,8 @@
             }
         }
 
-        // Вспомогательные функции
         function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
             return unsafe
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
@@ -399,16 +400,12 @@
             return date.toLocaleString('ru-RU');
         }
 
-        // Загружаем задачи при загрузке страницы
-        document.addEventListener('DOMContentLoaded', loadTasks);
+        // Загружаем задачи и устанавливаем дату при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            setDefaultDate();
+            loadTasks();
+        });
 
-        // Обновляем список задач после создания новой
-        const originalFormSubmit = document.getElementById('taskForm').onsubmit;
-        document.getElementById('taskForm').onsubmit = async function (e) {
-            await originalFormSubmit?.call(this, e);
-            // Если форма была отправлена успешно, обновляем список
-            setTimeout(loadTasks, 500);
-        };
     </script>
 </body>
 

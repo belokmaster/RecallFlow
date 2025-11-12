@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"reccal_flow/internal/database"
 	"reccal_flow/internal/handlers"
-	"strings"
 
 	_ "github.com/lib/pq"
 )
@@ -14,64 +12,26 @@ import (
 func main() {
 	path := "text.txt"
 
-	err := database.InitDB(path)
+	db, err := database.InitDB(path)
 	if err != nil {
-		log.Fatalf("problem with init db: %v", err)
+		log.Fatalf("Ошибка при инициализации БД: %v", err)
 	}
-	defer database.DB.Close()
+	defer db.Close()
 
-	http.HandleFunc("/", serveHTML)
-	http.HandleFunc("/tasks", tasksHandler)
-	http.HandleFunc("/tasks/", taskByIdHandler)
+	mux := http.NewServeMux()
 
-	log.Println("Server started at http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatalf("server error: %v", err)
-	}
-}
+	mux.HandleFunc("/", serveHTML)
+	mux.HandleFunc("POST /tasks", handlers.CreateTaskHandler(db))
+	mux.HandleFunc("GET /tasks", handlers.GetTasksHandler(db))
+	mux.HandleFunc("PUT /tasks/{id}", handlers.UpdateTaskDateHandler(db))
+	mux.HandleFunc("POST /tasks/{id}/complete", handlers.CompleteTaskHandler(db))
 
-// Обработчик для /tasks
-func tasksHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodPost:
-		handlers.CreateTaskHandler(w, r)
-	case http.MethodGet:
-		handlers.GetTasksHandler(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	log.Println("Сервер запущен на http://localhost:8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatalf("Ошибка при запуске сервера: %v", err)
 	}
 }
 
-func taskByIdHandler(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-	fmt.Printf("taskByIdHandler - Path: %s, Method: %s\n", path, r.Method)
-
-	// Проверяем сначала на завершение задачи
-	if strings.HasPrefix(path, "/tasks/complete/") {
-		// запрос на завершение задачи
-		if r.Method == http.MethodPost {
-			fmt.Println("Routing to CompleteTaskHandler")
-			handlers.CompleteTaskHandler(w, r)
-		} else {
-			fmt.Printf("Method not allowed for completion: %s\n", r.Method)
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	} else if strings.HasPrefix(path, "/tasks/") && len(path) > len("/tasks/") {
-		// запрос на обновление задачи
-		if r.Method == http.MethodPut {
-			fmt.Println("Routing to UpdateTaskDateHandler")
-			handlers.UpdateTaskDateHandler(w, r)
-		} else {
-			fmt.Printf("Method not allowed for update: %s\n", r.Method)
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	} else {
-		fmt.Println("Path not found")
-		http.NotFound(w, r)
-	}
-}
-
-// Обработчик для главной страницы
 func serveHTML(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

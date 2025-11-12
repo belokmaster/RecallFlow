@@ -5,33 +5,32 @@ import (
 	"fmt"
 	"log"
 	"reccal_flow/internal/config"
+	"time"
 )
 
-func InitDB(path string) error {
+func InitDB(path string) (*sql.DB, error) {
+	log.Println("InitDB: Start inizialization of DB")
 	config, err := config.ReadConfig(path)
 	if err != nil {
-		return fmt.Errorf("problem with gettig config: %v", err)
+		return nil, fmt.Errorf("problem with gettig config: %v", err)
 	}
 	connStr := config.ConnectionString()
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return fmt.Errorf("problem with connecting to db: %v", err)
+		return nil, fmt.Errorf("problem with connecting to db: %v", err)
 	}
 
-	err = db.Ping()
-	if err != nil {
-		return fmt.Errorf("problem with ping db: %v", err)
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("problem with ping db: %v", err)
 	}
 
-	err = CreateTables(db)
-	if err != nil {
-		return fmt.Errorf("problem with creating db: %v", err)
+	if err := CreateTables(db); err != nil {
+		return nil, fmt.Errorf("problem with creating db: %v", err)
 	}
 
-	DB = db // глобальная переменная конечно не круто но че поделать
-	log.Println("DB sucessfully inizializated")
-	return nil
+	log.Println("InitDB: DB sucessfully inizializated")
+	return db, nil
 }
 
 func CreateTables(db *sql.DB) error {
@@ -57,7 +56,7 @@ func CreateTables(db *sql.DB) error {
 	return err
 }
 
-func UpdateTaskNextReviewDate(db *sql.DB, id int, newDate string) error {
+func UpdateTaskNextReviewDate(db *sql.DB, id int, newDate time.Time) error {
 	query := "UPDATE task SET next_review_date = $1 WHERE id = $2"
 	_, err := db.Exec(query, newDate, id)
 	return err
@@ -74,10 +73,21 @@ func GetAllTasks(db *sql.DB) ([]Task, error) {
 	var tasks []Task
 	for rows.Next() {
 		var task Task
-		err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.CreatedAt, &task.NextReviewDate)
+		var description sql.NullString
+		err := rows.Scan(
+			&task.ID,
+			&task.Title,
+			&task.Description,
+			&task.CreatedAt,
+			&task.NextReviewDate,
+		)
 
 		if err != nil {
 			return nil, err
+		}
+
+		if description.Valid {
+			task.Description = &description.String
 		}
 
 		tasks = append(tasks, task)
@@ -87,53 +97,44 @@ func GetAllTasks(db *sql.DB) ([]Task, error) {
 }
 
 func CompleteTask(db *sql.DB, taskID int) error {
-	fmt.Printf("CompleteTask - Starting for task ID: %d\n", taskID)
+	log.Printf("CompleteTask: Starting for task ID: %d\n", taskID)
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback() // Откатит транзакцию, если она не была закоммичена
 
-	// Сначала получаем задачу
+	// Получаем задачу по ID
 	task, err := GetTaskByID(db, taskID)
 	if err != nil {
-		fmt.Printf("CompleteTask - Error getting task: %v\n", err)
 		return err
 	}
-	fmt.Printf("CompleteTask - Task to complete: ID=%d, Title=%s\n", task.ID, task.Title)
 
 	// Вставляем в succeeded_task
-	query := `
+	insertQuery := `
         INSERT INTO succeeded_task (task_id, title, description) 
         VALUES ($1, $2, $3)
     `
-	fmt.Printf("CompleteTask - Inserting into succeeded_task...\n")
-	result, err := db.Exec(query, task.ID, task.Title, task.Description)
-	if err != nil {
-		fmt.Printf("CompleteTask - Error inserting into succeeded_task: %v\n", err)
-		return err
+
+	if _, err := tx.Exec(insertQuery, task.ID, task.Title, task.Description); err != nil {
+		return fmt.Errorf("failed to insert into succeeded_task: %v", err)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	fmt.Printf("CompleteTask - Inserted into succeeded_task, rows affected: %d\n", rowsAffected)
-
-	// Удаляем из task
-	fmt.Printf("CompleteTask - Deleting from task table...\n")
-	result, err = db.Exec("DELETE FROM task WHERE id = $1", taskID)
-	if err != nil {
-		fmt.Printf("CompleteTask - Error deleting from task: %v\n", err)
-		return err
+	deleteQuery := "DELETE FROM task WHERE id = $1"
+	if _, err := tx.Exec(deleteQuery, taskID); err != nil {
+		return fmt.Errorf("failed to delete from task: %v", err)
 	}
 
-	rowsAffected, _ = result.RowsAffected()
-	fmt.Printf("CompleteTask - Deleted from task, rows affected: %d\n", rowsAffected)
-
-	fmt.Printf("CompleteTask - Successfully completed task %d\n", taskID)
-	return nil
+	return tx.Commit()
 }
 
 func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
-	fmt.Printf("GetSucceededTasks - Fetching succeeded tasks\n")
+	log.Println("GetSucceededTasks: Fetching succeeded tasks")
 
 	query := "SELECT id, task_id, title, description, completed_at FROM succeeded_task ORDER BY completed_at DESC"
 	rows, err := db.Query(query)
 	if err != nil {
-		fmt.Printf("GetSucceededTasks - Error querying: %v\n", err)
+		log.Printf("GetSucceededTasks: Error querying: %v\n", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -145,7 +146,7 @@ func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
 
 		err := rows.Scan(&task.ID, &task.TaskID, &task.Title, &description, &task.CompletedAt)
 		if err != nil {
-			fmt.Printf("GetSucceededTasks - Error scanning row: %v\n", err)
+			log.Printf("GetSucceededTasks: Error scanning row: %v\n", err)
 			return nil, err
 		}
 
@@ -156,7 +157,7 @@ func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
 		tasks = append(tasks, task)
 	}
 
-	fmt.Printf("GetSucceededTasks - Found %d succeeded tasks\n", len(tasks))
+	log.Printf("GetSucceededTasks: Found %d succeeded tasks\n", len(tasks))
 	return tasks, nil
 }
 
