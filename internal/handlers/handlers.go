@@ -140,7 +140,7 @@ func CompleteTaskHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		idStr := r.URL.Query().Get("id")
+		idStr := r.PathValue("id")
 		taskID, err := strconv.Atoi(idStr)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, "Неверный или отсутствующий ID задачи в URL")
@@ -156,6 +156,154 @@ func CompleteTaskHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		log.Printf("CompleteTaskHandler: Задача %d успешно завершена", taskID)
+		respondWithJSON(w, http.StatusOK, map[string]bool{"success": true})
+	}
+}
+
+func DeleteTaskHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			respondWithError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+			return
+		}
+
+		idStr := r.PathValue("id")
+		taskID, err := strconv.Atoi(idStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный ID")
+			return
+		}
+
+		if err := database.DeleteTask(db, taskID); err != nil {
+			log.Printf("DeleteTaskHandler: Ошибка удаления: %v", err)
+			respondWithError(w, http.StatusInternalServerError, "Ошибка удаления задачи")
+			return
+		}
+
+		respondWithJSON(w, http.StatusOK, map[string]bool{"success": true})
+	}
+}
+
+func DeleteSucceededTaskHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			respondWithError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+			return
+		}
+
+		idStr := r.PathValue("id")
+		taskID, err := strconv.Atoi(idStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный ID")
+			return
+		}
+
+		if err := database.DeleteSucceededTask(db, taskID); err != nil {
+			log.Printf("DeleteSucceededTaskHandler: Ошибка удаления: %v", err)
+			respondWithError(w, http.StatusInternalServerError, "Ошибка удаления выполненной задачи")
+			return
+		}
+
+		respondWithJSON(w, http.StatusOK, map[string]bool{"success": true})
+	}
+}
+
+func EditTaskHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("EditTaskHandler: Начало обработки")
+
+		if r.Method != http.MethodPut {
+			respondWithError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+			return
+		}
+
+		idStr := r.PathValue("id")
+		taskID, err := strconv.Atoi(idStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный ID задачи")
+			return
+		}
+
+		var req EditTaskRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный формат JSON")
+			return
+		}
+
+		if req.Title == "" || len(req.Title) > 250 {
+			respondWithError(w, http.StatusBadRequest, "Заголовок обязателен")
+			return
+		}
+
+		newCreatedAt, err := time.Parse("2006-01-02T15:04:05", req.NewCreatedAt)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный формат даты")
+			return
+		}
+
+		nextReviewDate, err := time.Parse("2006-01-02T15:04:05", req.NextReviewDate)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный формат даты")
+			return
+		}
+
+		updatedTask := database.Task{
+			ID:             taskID,
+			Title:          req.Title,
+			Description:    req.Description,
+			CreatedAt:      newCreatedAt,
+			NextReviewDate: nextReviewDate,
+		}
+
+		if err := database.RedactorTask(db, updatedTask); err != nil {
+			log.Printf("EditTaskHandler: Ошибка БД: %v", err)
+			respondWithError(w, http.StatusInternalServerError, "Ошибка при обновлении задачи")
+			return
+		}
+
+		respondWithJSON(w, http.StatusOK, map[string]bool{"success": true})
+	}
+}
+
+func EditSucceededTaskHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("EditSucceededTaskHandler: Начало обработки")
+
+		if r.Method != http.MethodPut {
+			respondWithError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+			return
+		}
+
+		idStr := r.PathValue("id")
+		taskID, err := strconv.Atoi(idStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный ID задачи")
+			return
+		}
+
+		var req EditSucceededTaskRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный формат JSON")
+			return
+		}
+
+		if req.Title == "" || len(req.Title) > 250 {
+			respondWithError(w, http.StatusBadRequest, "Заголовок обязателен")
+			return
+		}
+
+		updatedSucceededTask := database.SucceededTask{
+			ID:          taskID,
+			Title:       req.Title,
+			Description: req.Description,
+		}
+
+		if err := database.RedactorSucceededTask(db, updatedSucceededTask); err != nil {
+			log.Printf("EditSucceededTask: Ошибка БД: %v", err)
+			respondWithError(w, http.StatusInternalServerError, "Ошибка при обновлении задачи")
+			return
+		}
+
 		respondWithJSON(w, http.StatusOK, map[string]bool{"success": true})
 	}
 }

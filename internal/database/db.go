@@ -63,7 +63,8 @@ func UpdateTaskNextReviewDate(db *sql.DB, id int, newDate time.Time) error {
 }
 
 func GetAllTasks(db *sql.DB) ([]Task, error) {
-	query := "SELECT id, title, description, created_at, next_review_date FROM task"
+	query := "SELECT id, title, description, created_at, next_review_date FROM task ORDER BY next_review_date ASC"
+
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
@@ -104,13 +105,11 @@ func CompleteTask(db *sql.DB, taskID int) error {
 	}
 	defer tx.Rollback() // Откатит транзакцию, если она не была закоммичена
 
-	// Получаем задачу по ID
 	task, err := GetTaskByID(db, taskID)
 	if err != nil {
 		return err
 	}
 
-	// Вставляем в succeeded_task
 	insertQuery := `
         INSERT INTO succeeded_task (task_id, title, description) 
         VALUES ($1, $2, $3)
@@ -144,7 +143,13 @@ func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
 		var task SucceededTask
 		var description sql.NullString
 
-		err := rows.Scan(&task.ID, &task.TaskID, &task.Title, &description, &task.CompletedAt)
+		err := rows.Scan(&task.ID,
+			&task.TaskID,
+			&task.Title,
+			&description,
+			&task.CompletedAt,
+		)
+
 		if err != nil {
 			log.Printf("GetSucceededTasks: Error scanning row: %v\n", err)
 			return nil, err
@@ -168,7 +173,12 @@ func GetTaskByID(db *sql.DB, id int) (*Task, error) {
 	err := db.QueryRow(
 		query,
 		id,
-	).Scan(&task.ID, &task.Title, &task.Description, &task.CreatedAt, &task.NextReviewDate)
+	).Scan(&task.ID,
+		&task.Title,
+		&task.Description,
+		&task.CreatedAt,
+		&task.NextReviewDate,
+	)
 
 	if err != nil {
 		return nil, err
@@ -229,4 +239,80 @@ func AddNewTask(db *sql.DB, task Task) (*Task, error) {
 	}
 
 	return &createdTask, nil
+}
+
+func DeleteTask(db *sql.DB, id int) error {
+	query := "DELETE FROM task WHERE id = $1"
+	res, err := db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("delete task: %v", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %v", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("task with id=%d not found", id)
+	}
+
+	return nil
+}
+
+func DeleteSucceededTask(db *sql.DB, id int) error {
+	query := "DELETE FROM succeeded_task WHERE id = $1"
+	res, err := db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("delete succeeded_task: %v", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %v", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("succeeded_task with id=%d not found", id)
+	}
+
+	return nil
+}
+
+func RedactorTask(db *sql.DB, task Task) error {
+	query := "UPDATE task SET title = $1, description = $2, created_at = $3, next_review_date = $4 WHERE id = $5"
+	res, err := db.Exec(query, task.Title, task.Description, task.CreatedAt, task.NextReviewDate, task.ID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("succeeded task with id=%d not found", task.ID)
+	}
+
+	return err
+}
+
+func RedactorSucceededTask(db *sql.DB, task SucceededTask) error {
+	query := "UPDATE succeeded_task SET title = $1, description = $2 WHERE id = $3"
+	res, err := db.Exec(query, task.Title, task.Description, task.ID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("succeeded task with id=%d not found", task.ID)
+	}
+
+	return err
 }

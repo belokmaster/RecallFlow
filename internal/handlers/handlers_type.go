@@ -33,6 +33,18 @@ type TaskActionResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type EditTaskRequest struct {
+	Title          string  `json:"title"`
+	Description    *string `json:"description"`
+	NewCreatedAt   string  `json:"created_at"`
+	NextReviewDate string  `json:"next_review_date"`
+}
+
+type EditSucceededTaskRequest struct {
+	Title       string  `json:"title"`
+	Description *string `json:"description"`
+}
+
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	log.Printf("Отправка ошибки: код %d, сообщение: %s", code, message)
 	respondWithJSON(w, code, map[string]string{"error": message})
