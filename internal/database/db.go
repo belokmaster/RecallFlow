@@ -279,7 +279,7 @@ func DeleteSucceededTask(db *sql.DB, id int) error {
 	return nil
 }
 
-func RedactorTask(db *sql.DB, task Task) error {
+func RedactTask(db *sql.DB, task Task) error {
 	query := "UPDATE task SET title = $1, description = $2, created_at = $3, next_review_date = $4 WHERE id = $5"
 	res, err := db.Exec(query, task.Title, task.Description, task.CreatedAt, task.NextReviewDate, task.ID)
 	if err != nil {
@@ -298,7 +298,7 @@ func RedactorTask(db *sql.DB, task Task) error {
 	return err
 }
 
-func RedactorSucceededTask(db *sql.DB, task SucceededTask) error {
+func RedactSucceededTask(db *sql.DB, task SucceededTask) error {
 	query := "UPDATE succeeded_task SET title = $1, description = $2 WHERE id = $3"
 	res, err := db.Exec(query, task.Title, task.Description, task.ID)
 	if err != nil {

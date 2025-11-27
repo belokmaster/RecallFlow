@@ -18,16 +18,20 @@ func main() {
 	}
 	defer db.Close()
 
+	fileServer := http.FileServer(http.Dir("./web/static"))
 	mux := http.NewServeMux()
+	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
 
 	mux.HandleFunc("/", serveHTML)
 	mux.HandleFunc("POST /tasks", handlers.CreateTaskHandler(db))
 	mux.HandleFunc("GET /tasks", handlers.GetTasksHandler(db))
+
 	mux.HandleFunc("PUT /tasks/{id}", handlers.EditTaskHandler(db))
+	mux.HandleFunc("PUT /tasks/succeeded/{id}", handlers.EditSucceededTaskHandler(db))
 	mux.HandleFunc("POST /tasks/{id}/complete", handlers.CompleteTaskHandler(db))
+
 	mux.HandleFunc("DELETE /tasks/{id}", handlers.DeleteTaskHandler(db))
 	mux.HandleFunc("DELETE /tasks/succeeded/{id}", handlers.DeleteSucceededTaskHandler(db))
-	mux.HandleFunc("PUT /tasks/succeeded/{id}", handlers.EditSucceededTaskHandler(db))
 
 	log.Println("Сервер запущен на http://localhost:8080")
 

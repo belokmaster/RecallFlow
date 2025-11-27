@@ -255,7 +255,7 @@ func EditTaskHandler(db *sql.DB) http.HandlerFunc {
 			NextReviewDate: nextReviewDate,
 		}
 
-		if err := database.RedactorTask(db, updatedTask); err != nil {
+		if err := database.RedactTask(db, updatedTask); err != nil {
 			log.Printf("EditTaskHandler: Ошибка БД: %v", err)
 			respondWithError(w, http.StatusInternalServerError, "Ошибка при обновлении задачи")
 			return
@@ -298,7 +298,7 @@ func EditSucceededTaskHandler(db *sql.DB) http.HandlerFunc {
 			Description: req.Description,
 		}
 
-		if err := database.RedactorSucceededTask(db, updatedSucceededTask); err != nil {
+		if err := database.RedactSucceededTask(db, updatedSucceededTask); err != nil {
 			log.Printf("EditSucceededTask: Ошибка БД: %v", err)
 			respondWithError(w, http.StatusInternalServerError, "Ошибка при обновлении задачи")
 			return
