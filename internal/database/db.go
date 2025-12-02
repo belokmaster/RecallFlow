@@ -40,7 +40,8 @@ func CreateTables(db *sql.DB) error {
 			title VARCHAR(250) NOT NULL,
 			description TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			next_review_date TIMESTAMP NOT NULL
+			next_review_date TIMESTAMP NOT NULL,
+			priority INTEGER NOT NULL
 		);
 
 		CREATE TABLE IF NOT EXISTS succeeded_task (
@@ -48,7 +49,8 @@ func CreateTables(db *sql.DB) error {
 			task_id INTEGER NOT NULL,
 			title VARCHAR(250) NOT NULL,
 			description TEXT,
-			completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			priority INTEGER NOT NULL
 		);
 	`
 
@@ -63,7 +65,7 @@ func UpdateTaskNextReviewDate(db *sql.DB, id int, newDate time.Time) error {
 }
 
 func GetAllTasks(db *sql.DB) ([]Task, error) {
-	query := "SELECT id, title, description, created_at, next_review_date FROM task ORDER BY next_review_date ASC"
+	query := "SELECT id, title, description, created_at, next_review_date, priority FROM task ORDER BY next_review_date ASC"
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -81,6 +83,7 @@ func GetAllTasks(db *sql.DB) ([]Task, error) {
 			&task.Description,
 			&task.CreatedAt,
 			&task.NextReviewDate,
+			&task.Priority,
 		)
 
 		if err != nil {
@@ -111,11 +114,11 @@ func CompleteTask(db *sql.DB, taskID int) error {
 	}
 
 	insertQuery := `
-        INSERT INTO succeeded_task (task_id, title, description) 
-        VALUES ($1, $2, $3)
+        INSERT INTO succeeded_task (task_id, title, description, priority) 
+        VALUES ($1, $2, $3, $4)
     `
 
-	if _, err := tx.Exec(insertQuery, task.ID, task.Title, task.Description); err != nil {
+	if _, err := tx.Exec(insertQuery, task.ID, task.Title, task.Description, task.Priority); err != nil {
 		return fmt.Errorf("failed to insert into succeeded_task: %v", err)
 	}
 
@@ -130,7 +133,12 @@ func CompleteTask(db *sql.DB, taskID int) error {
 func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
 	log.Println("GetSucceededTasks: Fetching succeeded tasks")
 
-	query := "SELECT id, task_id, title, description, completed_at FROM succeeded_task ORDER BY completed_at DESC"
+	query := `
+		SELECT id, task_id, title, description, completed_at, priority 
+		FROM succeeded_task 
+		ORDER BY completed_at DESC
+	`
+
 	rows, err := db.Query(query)
 	if err != nil {
 		log.Printf("GetSucceededTasks: Error querying: %v\n", err)
@@ -148,6 +156,7 @@ func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
 			&task.Title,
 			&description,
 			&task.CompletedAt,
+			&task.Priority,
 		)
 
 		if err != nil {
@@ -168,7 +177,7 @@ func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
 
 func GetTaskByID(db *sql.DB, id int) (*Task, error) {
 	var task Task
-	query := "SELECT id, title, description, created_at, next_review_date FROM task WHERE id = $1"
+	query := "SELECT id, title, description, created_at, next_review_date, priority FROM task WHERE id = $1"
 
 	err := db.QueryRow(
 		query,
@@ -178,6 +187,7 @@ func GetTaskByID(db *sql.DB, id int) (*Task, error) {
 		&task.Description,
 		&task.CreatedAt,
 		&task.NextReviewDate,
+		&task.Priority,
 	)
 
 	if err != nil {
@@ -189,7 +199,13 @@ func GetTaskByID(db *sql.DB, id int) (*Task, error) {
 
 // просроченные таски
 func GetOverdueTasks(db *sql.DB) ([]Task, error) {
-	query := "SELECT id, title, description, created_at, next_review_date FROM task WHERE next_review_date < NOW() ORDER BY next_review_date ASC"
+	query := `
+		SELECT id, title, description, created_at, next_review_date, priority 
+		FROM task 
+		WHERE next_review_date < NOW() 
+		ORDER BY next_review_date ASC
+	`
+
 	rows, err := db.Query(query)
 
 	if err != nil {
@@ -200,7 +216,14 @@ func GetOverdueTasks(db *sql.DB) ([]Task, error) {
 	var tasks []Task
 	for rows.Next() {
 		var task Task
-		err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.CreatedAt, &task.NextReviewDate)
+		err := rows.Scan(
+			&task.ID,
+			&task.Title,
+			&task.Description,
+			&task.CreatedAt,
+			&task.NextReviewDate,
+			&task.Priority,
+		)
 
 		if err != nil {
 			return nil, err
@@ -214,9 +237,9 @@ func GetOverdueTasks(db *sql.DB) ([]Task, error) {
 
 func AddNewTask(db *sql.DB, task Task) (*Task, error) {
 	query := `
-		INSERT INTO task (title, description, next_review_date) 
-		VALUES ($1, $2, $3) 
-		RETURNING id, title, description, created_at, next_review_date
+		INSERT INTO task (title, description, next_review_date, priority) 
+		VALUES ($1, $2, $3, $4) 
+		RETURNING id, title, description, created_at, next_review_date, priority
 	`
 
 	var createdTask Task
@@ -227,7 +250,15 @@ func AddNewTask(db *sql.DB, task Task) (*Task, error) {
 		task.Title,
 		task.Description,
 		task.NextReviewDate,
-	).Scan(&createdTask.ID, &createdTask.Title, &description, &createdTask.CreatedAt, &createdTask.NextReviewDate)
+		task.Priority,
+	).Scan(
+		&createdTask.ID,
+		&createdTask.Title,
+		&description,
+		&createdTask.CreatedAt,
+		&createdTask.NextReviewDate,
+		&createdTask.Priority,
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("problem with creating task: %v", err)
@@ -280,8 +311,8 @@ func DeleteSucceededTask(db *sql.DB, id int) error {
 }
 
 func RedactTask(db *sql.DB, task Task) error {
-	query := "UPDATE task SET title = $1, description = $2, created_at = $3, next_review_date = $4 WHERE id = $5"
-	res, err := db.Exec(query, task.Title, task.Description, task.CreatedAt, task.NextReviewDate, task.ID)
+	query := "UPDATE task SET title = $1, description = $2, created_at = $3, next_review_date = $4, priority = $5 WHERE id = $6"
+	res, err := db.Exec(query, task.Title, task.Description, task.CreatedAt, task.NextReviewDate, task.Priority, task.ID)
 	if err != nil {
 		return err
 	}
@@ -299,8 +330,8 @@ func RedactTask(db *sql.DB, task Task) error {
 }
 
 func RedactSucceededTask(db *sql.DB, task SucceededTask) error {
-	query := "UPDATE succeeded_task SET title = $1, description = $2 WHERE id = $3"
-	res, err := db.Exec(query, task.Title, task.Description, task.ID)
+	query := "UPDATE succeeded_task SET title = $1, description = $2, priority = $3 WHERE id = $4"
+	res, err := db.Exec(query, task.Title, task.Description, task.Priority, task.ID)
 	if err != nil {
 		return err
 	}

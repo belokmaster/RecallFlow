@@ -19,6 +19,9 @@
     --radius-lg: 24px;
     --font-main: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --priority-low: #42ac5c;
+    --priority-medium: #FFCC00;
+    --priority-high: #d14444;
 }
 
 * {
@@ -166,13 +169,32 @@ body {
     flex-grow: 1;
 }
 
+.priority-divider {
+    height: 4px;
+    border-radius: 2px;
+    margin-top: auto;
+    margin-bottom: 16px;
+    background-color: var(--border-light);
+}
+
+.priority-divider.low {
+    background-color: var(--priority-low);
+}
+
+.priority-divider.medium {
+    background-color: var(--priority-medium);
+}
+
+.priority-divider.high {
+    background-color: var(--priority-high);
+}
+
 .task-meta {
     margin-top: auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding-top: 16px;
-    border-top: 1px solid var(--border-light);
 }
 
 .date-badge {
@@ -330,7 +352,8 @@ body {
 }
 
 input,
-textarea {
+textarea,
+select {
     width: 100%;
     padding: 14px 16px;
     background: #F5F5F7;
@@ -340,6 +363,8 @@ textarea {
     font-family: inherit;
     color: var(--text-primary);
     transition: all 0.2s;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 input:focus,

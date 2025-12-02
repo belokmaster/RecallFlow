@@ -57,6 +57,10 @@ function openEditModal(task, type) {
     document.getElementById('editTitle').value = task.title;
     document.getElementById('editDescription').value = task.description || '';
 
+    const priorityMap = ["", "Low", "Medium", "High"];
+    const priorityValue = priorityMap[task.priority] || "";
+    document.getElementById('editPriority').value = priorityValue;
+
     const activeFields = document.getElementById('activeTaskFields');
     const modalTitle = document.getElementById('editModalTitle');
 
@@ -71,7 +75,10 @@ function openEditModal(task, type) {
     }
     editModal.classList.add('open');
 }
-function closeEditModal() { editModal.classList.remove('open'); }
+
+function closeEditModal() {
+    editModal.classList.remove('open');
+}
 
 window.onclick = function (event) {
     if (event.target == createModal) closeCreateModal();
@@ -103,18 +110,26 @@ function renderActiveTasks(tasks) {
         list.innerHTML = `<div class="empty-state"><span class="empty-icon">🎉</span><p>Всё чисто! Задач нет.</p></div>`;
         return;
     }
-    list.innerHTML = tasks.map(t => `
-                <div class="task-card" onclick='openEditModal(${JSON.stringify(t)}, "active")'>
-                    <div>
-                        <h3>${esc(t.title)}</h3>
-                        <div class="task-desc">${esc(t.description || 'Нет описания')}</div>
-                    </div>
+    list.innerHTML = tasks.map(t => {
+        const priorityMap = ["", "low", "medium", "high"];
+        const priorityClass = priorityMap[t.priority] || "";
+
+        return `
+            <div class="task-card" onclick='openEditModal(${JSON.stringify(t)}, "active")'>
+                <div>
+                    <h3>${esc(t.title)}</h3>
+                    <div class="task-desc">${esc(t.description || 'Нет описания')}</div>
+                </div>
+                <div>
+                    <div class="priority-divider ${esc(priorityClass)}"></div>
                     <div class="task-meta">
                         <div class="date-badge"><span>Срок:</span><span>${formatDate(t.next_review_date)}</span></div>
                         <button class="btn-check-circle" onclick="event.stopPropagation(); completeTask(${t.id})" title="Завершить">✓</button>
                     </div>
                 </div>
-            `).join('');
+            </div>
+        `;
+    }).join('');
 }
 
 function renderSucceededTasks(tasks) {
@@ -123,13 +138,19 @@ function renderSucceededTasks(tasks) {
         list.innerHTML = `<div class="empty-state"><p>История пуста.</p></div>`;
         return;
     }
-    list.innerHTML = tasks.map(t => `
-                <div class="succeeded-card" onclick='openEditModal(${JSON.stringify(t)}, "succeeded")'>
-                    <h4>${esc(t.title)}</h4>
-                    ${t.description ? `<p style="font-size:13px; color:#86868B">${esc(t.description)}</p>` : ''}
-                    <small>Завершено: ${formatDate(t.completed_at)}</small>
-                </div>
-            `).join('');
+    list.innerHTML = tasks.map(t => {
+        const priorityMap = ["", "low", "medium", "high"];
+        const priorityClass = priorityMap[t.priority] || "";
+
+        return `
+            <div class="succeeded-card" onclick='openEditModal(${JSON.stringify(t)}, "succeeded")'>
+                <h4>${esc(t.title)}</h4>
+                ${t.description ? `<p style="font-size:13px; color:#86868B">${esc(t.description)}</p>` : ''}
+                <div class="priority-divider ${esc(priorityClass)}" style="margin-top: 16px; margin-bottom: 12px;"></div>
+                <small>Завершено: ${formatDate(t.completed_at)}</small>
+            </div>
+        `;
+    }).join('');
 }
 
 document.getElementById('createTaskForm').addEventListener('submit', async (e) => {
@@ -169,17 +190,24 @@ document.getElementById('createTaskForm').addEventListener('submit', async (e) =
 async function saveTaskChanges() {
     const id = document.getElementById('editTaskId').value;
     const type = document.getElementById('editTaskType').value;
+    const selectedPriority = document.getElementById('editPriority').value;
 
     const data = {
-        title: document.getElementById('editTitle').value,
-        description: document.getElementById('editDescription').value || null,
+        title: document.getElementById('editTitle').value.trim(),
+        description: document.getElementById('editDescription').value.trim() || null,
+        priority: selectedPriority || "" // Отправляем пустую строку, если приоритет не выбран
     };
 
     let url = `/tasks/${id}`;
 
     if (type === 'active') {
+        // --- ИЗМЕНЕНИЕ: ИСПОЛЬЗУЕМ created_at ---
+        // Go ожидает 'created_at', а не 'new_created_at'
         data.created_at = getUTCDateString(document.getElementById('editCreatedAt').value);
         data.next_review_date = getUTCDateString(document.getElementById('editNextReview').value);
+
+        // Проверка: если даты пустые, сервер вернет 400. Убедимся, что они отправляются.
+        console.log("Отправка данных:", data);
     } else {
         url = `/tasks/succeeded/${id}`;
     }
@@ -190,14 +218,21 @@ async function saveTaskChanges() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
+
         if (res.ok) {
             closeEditModal();
             loadTasks();
             showToast('Сохранено');
         } else {
-            showToast('Ошибка обновления', 'error');
+            // Читаем текст ошибки от сервера
+            const errorData = await res.json();
+            console.error("Ошибка от сервера:", errorData); // СМОТРИТЕ СЮДА В КОНСОЛИ (F12)
+            showToast(errorData.error || `Ошибка ${res.status}`, 'error');
         }
-    } catch (e) { showToast('Ошибка сети', 'error'); }
+    } catch (e) {
+        console.error("Ошибка сети:", e);
+        showToast('Ошибка сети', 'error');
+    }
 }
 
 async function deleteCurrentTask() {

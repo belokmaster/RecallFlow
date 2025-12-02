@@ -3,12 +3,32 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"reccal_flow/internal/database"
 	"strconv"
 	"time"
 )
+
+func getPriorityLvl(priorityStr string) (database.PriorityLvl, error) {
+	var priority database.PriorityLvl
+
+	switch priorityStr {
+	case "":
+		priority = database.None
+	case "Low":
+		priority = database.Low
+	case "Medium":
+		priority = database.Medium
+	case "High":
+		priority = database.High
+	default:
+		return 0, fmt.Errorf("неверный приоритет приоретатов: %s", priorityStr)
+	}
+
+	return priority, nil
+}
 
 func CreateTaskHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -38,10 +58,17 @@ func CreateTaskHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		priority, err := getPriorityLvl(req.Priority)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный уровень приоритета. Допустимые значения: Low, Medium, High")
+			return
+		}
+
 		task := database.Task{
 			Title:          req.Title,
 			Description:    req.Description,
 			NextReviewDate: nextReviewDate,
+			Priority:       priority,
 		}
 
 		createdTask, err := database.AddNewTask(db, task)
@@ -247,12 +274,19 @@ func EditTaskHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		priority, err := getPriorityLvl(req.Priority)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный уровень приоритета. Допустимые значения: Low, Medium, High")
+			return
+		}
+
 		updatedTask := database.Task{
 			ID:             taskID,
 			Title:          req.Title,
 			Description:    req.Description,
 			CreatedAt:      newCreatedAt,
 			NextReviewDate: nextReviewDate,
+			Priority:       priority,
 		}
 
 		if err := database.RedactTask(db, updatedTask); err != nil {
@@ -292,10 +326,17 @@ func EditSucceededTaskHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		priority, err := getPriorityLvl(req.Priority)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Неверный уровень приоритета. Допустимые значения: Low, Medium, High")
+			return
+		}
+
 		updatedSucceededTask := database.SucceededTask{
 			ID:          taskID,
 			Title:       req.Title,
 			Description: req.Description,
+			Priority:    priority,
 		}
 
 		if err := database.RedactSucceededTask(db, updatedSucceededTask); err != nil {

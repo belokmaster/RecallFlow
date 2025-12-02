@@ -11,11 +11,7 @@ type CreateTaskRequest struct {
 	Title          string  `json:"title"`
 	Description    *string `json:"description"`
 	NextReviewDate string  `json:"next_review_date"`
-}
-
-type CreateTaskResponse struct {
-	Task  *database.Task `json:"task,omitempty"`
-	Error string         `json:"error,omitempty"`
+	Priority       string  `json:"priority"`
 }
 
 type TasksResponse struct {
@@ -28,21 +24,18 @@ type UpdateTaskDateRequest struct {
 	NewDate string `json:"new_date"`
 }
 
-type TaskActionResponse struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
-}
-
 type EditTaskRequest struct {
 	Title          string  `json:"title"`
 	Description    *string `json:"description"`
 	NewCreatedAt   string  `json:"created_at"`
 	NextReviewDate string  `json:"next_review_date"`
+	Priority       string  `json:"priority"`
 }
 
 type EditSucceededTaskRequest struct {
 	Title       string  `json:"title"`
 	Description *string `json:"description"`
+	Priority    string  `json:"priority"`
 }
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
