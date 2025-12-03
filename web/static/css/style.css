@@ -480,3 +480,61 @@ textarea {
     opacity: 0.5;
     display: block;
 }
+
+.select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+select#editPriority {
+    width: 100%;
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    padding: 14px 40px 14px 16px;
+    font-family: var(--font-main);
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    transition: all 0.2s ease;
+}
+
+select#editPriority:hover {
+    background-color: #E5E5E5;
+}
+
+select#editPriority:focus {
+    background-color: #FFFFFF;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+}
+
+.select-wrapper::after {
+    content: '';
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid var(--text-tertiary);
+    border-bottom: 2px solid var(--text-tertiary);
+    transform: translateY(-60%) rotate(45deg);
+    pointer-events: none;
+    transition: all 0.2s var(--ease-bounce);
+}
+
+.select-wrapper:focus-within::after {
+    border-color: var(--accent-blue);
+    transform: translateY(-20%) rotate(225deg);
+}
+
+select#editPriority option {
+    background-color: #FFFFFF;
+    color: var(--text-primary);
+    padding: 12px;
+    font-family: var(--font-main);
+}
