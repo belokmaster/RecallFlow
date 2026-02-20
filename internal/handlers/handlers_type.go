@@ -7,46 +7,37 @@ import (
 	"reccal_flow/internal/database"
 )
 
-type CreateTaskRequest struct {
-	Title          string  `json:"title"`
-	Description    *string `json:"description"`
-	NextReviewDate string  `json:"next_review_date"`
-	Priority       string  `json:"priority"`
+// Card request types
+type CreateCardRequest struct {
+	Word        string  `json:"word"`
+	Translation string  `json:"translation"`
+	Example     *string `json:"example"`
 }
 
-type TasksResponse struct {
-	Tasks          []database.Task          `json:"tasks"`
-	SucceededTasks []database.SucceededTask `json:"succeeded_tasks,omitempty"`
-	Error          string                   `json:"error,omitempty"`
+type CardsResponse struct {
+	Cards []database.Card `json:"cards"`
+	Error string          `json:"error,omitempty"`
 }
 
-type UpdateTaskDateRequest struct {
-	NewDate string `json:"new_date"`
+type UpdateCardRequest struct {
+	Word        string  `json:"word"`
+	Translation string  `json:"translation"`
+	Example     *string `json:"example"`
 }
 
-type EditTaskRequest struct {
-	Title          string  `json:"title"`
-	Description    *string `json:"description"`
-	NewCreatedAt   string  `json:"created_at"`
-	NextReviewDate string  `json:"next_review_date"`
-	Priority       string  `json:"priority"`
-}
-
-type EditSucceededTaskRequest struct {
-	Title       string  `json:"title"`
-	Description *string `json:"description"`
-	Priority    string  `json:"priority"`
+type RepeatCardRequest struct {
+	Success bool `json:"success"`
 }
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
-	log.Printf("Отправка ошибки: код %d, сообщение: %s", code, message)
+	log.Printf("Error: code %d, message: %s", code, message)
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	response, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("Критическая ошибка: не удалось закодировать JSON: %v", err)
+		log.Printf("Critical error: failed to marshal JSON: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

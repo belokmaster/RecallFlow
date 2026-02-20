@@ -5,278 +5,231 @@ import (
 	"fmt"
 	"log"
 	"reccal_flow/internal/config"
-	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
-func InitDB(path string) (*sql.DB, error) {
-	log.Println("InitDB: Start inizialization of DB")
-	config, err := config.ReadConfig(path)
-	if err != nil {
-		return nil, fmt.Errorf("problem with gettig config: %v", err)
-	}
-	connStr := config.ConnectionString()
+func InitDB() (*sql.DB, error) {
+	log.Println("InitDB: Инициализация SQLite БД")
+	
+	dbPath := config.GetDatabasePath()
+	log.Printf("InitDB: Использование БД: %s", dbPath)
 
-	db, err := sql.Open("postgres", connStr)
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("problem with connecting to db: %v", err)
+		return nil, fmt.Errorf("ошибка подключения к БД: %v", err)
+	}
+
+	// Включить foreign keys для SQLite
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return nil, fmt.Errorf("ошибка при включении foreign keys: %v", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("problem with ping db: %v", err)
+		return nil, fmt.Errorf("ошибка при проверке подключения: %v", err)
 	}
 
 	if err := CreateTables(db); err != nil {
-		return nil, fmt.Errorf("problem with creating db: %v", err)
+		return nil, fmt.Errorf("ошибка при создании таблиц: %v", err)
 	}
 
-	log.Println("InitDB: DB sucessfully inizializated")
+	log.Println("InitDB: БД успешно инициализирована")
 	return db, nil
 }
 
 func CreateTables(db *sql.DB) error {
 	query := `
-		CREATE TABLE IF NOT EXISTS task (
-			id SERIAL PRIMARY KEY,
-			title VARCHAR(250) NOT NULL,
-			description TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			next_review_date TIMESTAMP NOT NULL,
-			priority INTEGER NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS succeeded_task (
-			id SERIAL PRIMARY KEY,
-			task_id INTEGER NOT NULL,
-			title VARCHAR(250) NOT NULL,
-			description TEXT,
-			completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			priority INTEGER NOT NULL
+		CREATE TABLE IF NOT EXISTS card (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			word TEXT NOT NULL,
+			translation TEXT NOT NULL,
+			example TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_reviewed DATETIME,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			attempts INTEGER DEFAULT 0,
+			successes INTEGER DEFAULT 0
 		);
 	`
 
 	_, err := db.Exec(query)
-	return err
-}
-
-func UpdateTaskNextReviewDate(db *sql.DB, id int, newDate time.Time) error {
-	query := "UPDATE task SET next_review_date = $1 WHERE id = $2"
-	_, err := db.Exec(query, newDate, id)
-	return err
-}
-
-func GetAllTasks(db *sql.DB) ([]Task, error) {
-	query := "SELECT id, title, description, created_at, next_review_date, priority FROM task ORDER BY next_review_date ASC"
-
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var task Task
-		var description sql.NullString
-		err := rows.Scan(
-			&task.ID,
-			&task.Title,
-			&task.Description,
-			&task.CreatedAt,
-			&task.NextReviewDate,
-			&task.Priority,
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if description.Valid {
-			task.Description = &description.String
-		}
-
-		tasks = append(tasks, task)
-	}
-
-	return tasks, nil
-}
-
-func CompleteTask(db *sql.DB, taskID int) error {
-	log.Printf("CompleteTask: Starting for task ID: %d\n", taskID)
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %v", err)
-	}
-	defer tx.Rollback() // Откатит транзакцию, если она не была закоммичена
-
-	task, err := GetTaskByID(db, taskID)
 	if err != nil {
 		return err
 	}
 
-	insertQuery := `
-        INSERT INTO succeeded_task (task_id, title, description, priority) 
-        VALUES ($1, $2, $3, $4)
-    `
-
-	if _, err := tx.Exec(insertQuery, task.ID, task.Title, task.Description, task.Priority); err != nil {
-		return fmt.Errorf("failed to insert into succeeded_task: %v", err)
-	}
-
-	deleteQuery := "DELETE FROM task WHERE id = $1"
-	if _, err := tx.Exec(deleteQuery, taskID); err != nil {
-		return fmt.Errorf("failed to delete from task: %v", err)
-	}
-
-	return tx.Commit()
-}
-
-func GetSucceededTasks(db *sql.DB) ([]SucceededTask, error) {
-	log.Println("GetSucceededTasks: Fetching succeeded tasks")
-
-	query := `
-		SELECT id, task_id, title, description, completed_at, priority 
-		FROM succeeded_task 
-		ORDER BY completed_at DESC
-	`
-
-	rows, err := db.Query(query)
+	checkColumn := `PRAGMA table_info(card)`
+	rows, err := db.Query(checkColumn)
 	if err != nil {
-		log.Printf("GetSucceededTasks: Error querying: %v\n", err)
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 
-	var tasks []SucceededTask
+	hasUpdatedAt := false
 	for rows.Next() {
-		var task SucceededTask
-		var description sql.NullString
+		var cid int
+		var name string
+		var colType string
+		var notnull int
+		var dfltValue interface{}
+		var pk int
 
-		err := rows.Scan(&task.ID,
-			&task.TaskID,
-			&task.Title,
-			&description,
-			&task.CompletedAt,
-			&task.Priority,
-		)
-
+		err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk)
 		if err != nil {
-			log.Printf("GetSucceededTasks: Error scanning row: %v\n", err)
-			return nil, err
+			continue
 		}
 
-		if description.Valid {
-			task.Description = &description.String
+		if name == "updated_at" {
+			hasUpdatedAt = true
+			break
 		}
-
-		tasks = append(tasks, task)
 	}
 
-	log.Printf("GetSucceededTasks: Found %d succeeded tasks\n", len(tasks))
-	return tasks, nil
+	// Если колонка отсутствует, добавляем её
+	if !hasUpdatedAt {
+		altQuery := `ALTER TABLE card ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`
+		_, err := db.Exec(altQuery)
+		if err != nil {
+			return fmt.Errorf("failed to add updated_at column: %v", err)
+		}
+	}
+
+	return nil
 }
 
-func GetTaskByID(db *sql.DB, id int) (*Task, error) {
-	var task Task
-	query := "SELECT id, title, description, created_at, next_review_date, priority FROM task WHERE id = $1"
+// Card operations
+func CreateCard(db *sql.DB, word, translation string, example *string) (*Card, error) {
+	query := `
+		INSERT INTO card (word, translation, example, created_at, updated_at)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, word, translation, example, created_at, last_reviewed, updated_at, attempts, successes
+	`
 
-	err := db.QueryRow(
-		query,
-		id,
-	).Scan(&task.ID,
-		&task.Title,
-		&task.Description,
-		&task.CreatedAt,
-		&task.NextReviewDate,
-		&task.Priority,
+	var card Card
+	var exampleNull sql.NullString
+	var lastReviewedNull sql.NullTime
+
+	err := db.QueryRow(query, word, translation, example).Scan(
+		&card.ID,
+		&card.Word,
+		&card.Translation,
+		&exampleNull,
+		&card.CreatedAt,
+		&lastReviewedNull,
+		&card.UpdatedAt,
+		&card.Attempts,
+		&card.Successes,
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create card: %v", err)
 	}
 
-	return &task, nil
+	if exampleNull.Valid {
+		card.Example = &exampleNull.String
+	}
+	if lastReviewedNull.Valid {
+		card.LastReviewed = &lastReviewedNull.Time
+	}
+
+	return &card, nil
 }
 
-// просроченные таски
-func GetOverdueTasks(db *sql.DB) ([]Task, error) {
+func GetAllCards(db *sql.DB) ([]Card, error) {
 	query := `
-		SELECT id, title, description, created_at, next_review_date, priority 
-		FROM task 
-		WHERE next_review_date < NOW() 
-		ORDER BY next_review_date ASC
+		SELECT id, word, translation, example, created_at, last_reviewed, updated_at, attempts, successes
+		FROM card
+		ORDER BY updated_at DESC
 	`
 
 	rows, err := db.Query(query)
-
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query cards: %v", err)
 	}
 	defer rows.Close()
 
-	var tasks []Task
+	var cards []Card
 	for rows.Next() {
-		var task Task
+		var card Card
+		var exampleNull sql.NullString
+		var lastReviewedNull sql.NullTime
+
 		err := rows.Scan(
-			&task.ID,
-			&task.Title,
-			&task.Description,
-			&task.CreatedAt,
-			&task.NextReviewDate,
-			&task.Priority,
+			&card.ID,
+			&card.Word,
+			&card.Translation,
+			&exampleNull,
+			&card.CreatedAt,
+			&lastReviewedNull,
+			&card.UpdatedAt,
+			&card.Attempts,
+			&card.Successes,
 		)
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan card: %v", err)
 		}
 
-		tasks = append(tasks, task)
+		if exampleNull.Valid {
+			card.Example = &exampleNull.String
+		}
+
+		if lastReviewedNull.Valid {
+			card.LastReviewed = &lastReviewedNull.Time
+		}
+
+		cards = append(cards, card)
 	}
 
-	return tasks, nil
+	return cards, nil
 }
 
-func AddNewTask(db *sql.DB, task Task) (*Task, error) {
+func GetCardByID(db *sql.DB, id int) (*Card, error) {
 	query := `
-		INSERT INTO task (title, description, next_review_date, priority) 
-		VALUES ($1, $2, $3, $4) 
-		RETURNING id, title, description, created_at, next_review_date, priority
+		SELECT id, word, translation, example, created_at, last_reviewed, updated_at, attempts, successes
+		FROM card
+		WHERE id = $1
 	`
 
-	var createdTask Task
-	var description sql.NullString
+	var card Card
+	var exampleNull sql.NullString
+	var lastReviewedNull sql.NullTime
 
-	err := db.QueryRow(
-		query,
-		task.Title,
-		task.Description,
-		task.NextReviewDate,
-		task.Priority,
-	).Scan(
-		&createdTask.ID,
-		&createdTask.Title,
-		&description,
-		&createdTask.CreatedAt,
-		&createdTask.NextReviewDate,
-		&createdTask.Priority,
+	err := db.QueryRow(query, id).Scan(
+		&card.ID,
+		&card.Word,
+		&card.Translation,
+		&exampleNull,
+		&card.CreatedAt,
+		&lastReviewedNull,
+		&card.UpdatedAt,
+		&card.Attempts,
+		&card.Successes,
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("problem with creating task: %v", err)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("card with id=%d not found", id)
+		}
+
+		return nil, fmt.Errorf("query card: %v", err)
 	}
 
-	// Конвертируем sql.NullString в *string
-	if description.Valid {
-		createdTask.Description = &description.String
+	if exampleNull.Valid {
+		card.Example = &exampleNull.String
 	}
 
-	return &createdTask, nil
+	if lastReviewedNull.Valid {
+		card.LastReviewed = &lastReviewedNull.Time
+	}
+
+	return &card, nil
 }
 
-func DeleteTask(db *sql.DB, id int) error {
-	query := "DELETE FROM task WHERE id = $1"
+func DeleteCard(db *sql.DB, id int) error {
+	query := "DELETE FROM card WHERE id = $1"
 	res, err := db.Exec(query, id)
 	if err != nil {
-		return fmt.Errorf("delete task: %v", err)
+		return fmt.Errorf("delete card: %v", err)
 	}
 
 	rows, err := res.RowsAffected()
@@ -285,17 +238,22 @@ func DeleteTask(db *sql.DB, id int) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("task with id=%d not found", id)
+		return fmt.Errorf("card with id=%d not found", id)
 	}
 
 	return nil
 }
 
-func DeleteSucceededTask(db *sql.DB, id int) error {
-	query := "DELETE FROM succeeded_task WHERE id = $1"
-	res, err := db.Exec(query, id)
+func UpdateCard(db *sql.DB, id int, word, translation string, example *string) error {
+	query := `
+		UPDATE card
+		SET word = $1, translation = $2, example = $3, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $4
+	`
+
+	res, err := db.Exec(query, word, translation, example, id)
 	if err != nil {
-		return fmt.Errorf("delete succeeded_task: %v", err)
+		return fmt.Errorf("update card: %v", err)
 	}
 
 	rows, err := res.RowsAffected()
@@ -304,46 +262,91 @@ func DeleteSucceededTask(db *sql.DB, id int) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("succeeded_task with id=%d not found", id)
+		return fmt.Errorf("card with id=%d not found", id)
 	}
 
 	return nil
 }
 
-func RedactTask(db *sql.DB, task Task) error {
-	query := "UPDATE task SET title = $1, description = $2, created_at = $3, next_review_date = $4, priority = $5 WHERE id = $6"
-	res, err := db.Exec(query, task.Title, task.Description, task.CreatedAt, task.NextReviewDate, task.Priority, task.ID)
+// GetCardsForReview returns cards sorted by last_reviewed (oldest first) for spaced repetition
+func GetCardsForReview(db *sql.DB) ([]Card, error) {
+	query := `
+		SELECT id, word, translation, example, created_at, last_reviewed, updated_at, attempts, successes
+		FROM card
+		ORDER BY 
+			CASE WHEN last_reviewed IS NULL THEN 0 ELSE 1 END,
+			last_reviewed ASC
+		LIMIT 10
+	`
+
+	rows, err := db.Query(query)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("query cards for review: %v", err)
+	}
+	defer rows.Close()
+
+	var cards []Card
+	for rows.Next() {
+		var card Card
+		var exampleNull sql.NullString
+		var lastReviewedNull sql.NullTime
+
+		err := rows.Scan(
+			&card.ID,
+			&card.Word,
+			&card.Translation,
+			&exampleNull,
+			&card.CreatedAt,
+			&lastReviewedNull,
+			&card.UpdatedAt,
+			&card.Attempts,
+			&card.Successes,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("scan card: %v", err)
+		}
+
+		if exampleNull.Valid {
+			card.Example = &exampleNull.String
+		}
+
+		if lastReviewedNull.Valid {
+			card.LastReviewed = &lastReviewedNull.Time
+		}
+
+		cards = append(cards, card)
 	}
 
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return fmt.Errorf("succeeded task with id=%d not found", task.ID)
-	}
-
-	return err
+	return cards, nil
 }
 
-func RedactSucceededTask(db *sql.DB, task SucceededTask) error {
-	query := "UPDATE succeeded_task SET title = $1, description = $2, priority = $3 WHERE id = $4"
-	res, err := db.Exec(query, task.Title, task.Description, task.Priority, task.ID)
+// RepeatCard marks a card as reviewed and updates its statistics
+func RepeatCard(db *sql.DB, id int, success bool) error {
+	query := `
+		UPDATE card
+		SET last_reviewed = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, attempts = attempts + 1
+	`
+
+	if success {
+		query += `, successes = successes + 1`
+	}
+
+	query += ` WHERE id = $1`
+
+	res, err := db.Exec(query, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("repeat card: %v", err)
 	}
 
 	rows, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("rows affected: %v", err)
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("succeeded task with id=%d not found", task.ID)
+		return fmt.Errorf("card with id=%d not found", id)
 	}
 
-	return err
+	return nil
 }

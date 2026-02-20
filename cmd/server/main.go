@@ -3,53 +3,60 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"reccal_flow/internal/database"
 	"reccal_flow/internal/handlers"
-
-	_ "github.com/lib/pq"
 )
 
-func main() {
-	path := "text.txt"
+func enableCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	db, err := database.InitDB(path)
-	if err != nil {
-		log.Fatalf("Ошибка при инициализации БД: %v", err)
-	}
-	defer db.Close()
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
-	fileServer := http.FileServer(http.Dir("./web/static"))
-	mux := http.NewServeMux()
-	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
-
-	mux.HandleFunc("/", serveHTML)
-	mux.HandleFunc("POST /tasks", handlers.CreateTaskHandler(db))
-	mux.HandleFunc("GET /tasks", handlers.GetTasksHandler(db))
-
-	mux.HandleFunc("PUT /tasks/{id}", handlers.EditTaskHandler(db))
-	mux.HandleFunc("PUT /tasks/succeeded/{id}", handlers.EditSucceededTaskHandler(db))
-	mux.HandleFunc("POST /tasks/{id}/complete", handlers.CompleteTaskHandler(db))
-
-	mux.HandleFunc("DELETE /tasks/{id}", handlers.DeleteTaskHandler(db))
-	mux.HandleFunc("DELETE /tasks/succeeded/{id}", handlers.DeleteSucceededTaskHandler(db))
-
-	log.Println("Сервер запущен на http://localhost:8080")
-
-	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatalf("Ошибка при запуске сервера: %v", err)
+		next(w, r)
 	}
 }
 
-func serveHTML(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func main() {
+	db, err := database.InitDB()
+	if err != nil {
+		log.Fatalf("Problem with inisialization BD: %v", err)
+	}
+	defer db.Close()
+
+	mux := http.NewServeMux()
+
+	// API routes
+	mux.HandleFunc("POST /cards", enableCORS(handlers.CreateCardHandler(db)))
+	mux.HandleFunc("GET /cards", enableCORS(handlers.GetCardsHandler(db)))
+	mux.HandleFunc("PUT /cards/{id}", enableCORS(handlers.UpdateCardHandler(db)))
+	mux.HandleFunc("DELETE /cards/{id}", enableCORS(handlers.DeleteCardHandler(db)))
+	mux.HandleFunc("GET /repeat", enableCORS(handlers.GetCardsForReviewHandler(db)))
+	mux.HandleFunc("POST /repeat/{id}", enableCORS(handlers.RepeatCardHandler(db)))
+
+	// Serve frontend
+	mux.HandleFunc("/", serveFrontend)
+
+	log.Println("Server start at http://localhost:8080")
+
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatalf("Problem with start server: %v", err)
+	}
+}
+
+func serveFrontend(w http.ResponseWriter, r *http.Request) {
+	path := "web/frontend/dist" + r.URL.Path
+	
+	if _, err := os.Stat(path); err == nil {
+		http.ServeFile(w, r, path)
 		return
 	}
 
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-
-	http.ServeFile(w, r, "web/templates/index.html")
+	http.ServeFile(w, r, "web/frontend/dist/index.html")
 }

@@ -1,0 +1,146 @@
+.card-view-modal {
+  max-width: 450px;
+}
+
+.card-view-header {
+  text-align: center;
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.word-display {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  word-break: break-word;
+  margin-bottom: 12px;
+  line-height: 1.2;
+}
+
+.translation-display {
+  font-size: 18px;
+  color: var(--text-secondary);
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.example-section {
+  padding: 16px;
+  background: var(--bg-body);
+  border-radius: var(--radius-sm);
+  margin-bottom: 24px;
+}
+
+.example-section label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.example-section p {
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin: 0;
+  font-size: 14px;
+}
+
+.stats-section {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 20px;
+  background: var(--bg-body);
+  border-radius: var(--radius-sm);
+  margin-bottom: 24px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 12px;
+  background: white;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+}
+
+.stat-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-blue);
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+}
+
+.btn-delete,
+.btn-cancel {
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-main);
+  transition: all 0.2s ease;
+}
+
+.btn-delete {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--accent-red);
+}
+
+.btn-delete:hover {
+  background: var(--accent-red);
+  color: white;
+}
+
+.btn-cancel {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.btn-cancel:hover {
+  background: #0062CC;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 480px) {
+  .card-view-modal {
+    max-width: 100%;
+  }
+
+  .word-display {
+    font-size: 28px;
+  }
+
+  .translation-display {
+    font-size: 16px;
+  }
+
+  .stats-section {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .modal-actions {
+    grid-template-columns: 1fr;
+  }
+}
