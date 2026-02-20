@@ -98,7 +98,7 @@ function App() {
               className="btn-repeat" 
               onClick={() => setCurrentPage('repeat')}
             >
-              🔁 Повторение
+              Повторение
             </button>
             <button 
               className="btn-create" 
@@ -122,7 +122,7 @@ function App() {
           <div className="error">{error}</div>
         ) : cards.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📚</div>
+            <div className="empty-icon">...</div>
             <h3>Нет карточек</h3>
             <p>Начните с создания первой карточки для изучения новых слов</p>
             <button className="btn-action" onClick={() => setShowCreateModal(true)}>

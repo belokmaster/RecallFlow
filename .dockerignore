@@ -1,0 +1,10 @@
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+node_modules
+web/frontend/node_modules
+web/frontend/dist
+recall_flow.db
+*.db
+data

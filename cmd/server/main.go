@@ -26,13 +26,12 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 func main() {
 	db, err := database.InitDB()
 	if err != nil {
-		log.Fatalf("Problem with inisialization BD: %v", err)
+		log.Fatalf("Problem with DB initialization: %v", err)
 	}
 	defer db.Close()
 
 	mux := http.NewServeMux()
 
-	// API routes
 	mux.HandleFunc("POST /cards", enableCORS(handlers.CreateCardHandler(db)))
 	mux.HandleFunc("GET /cards", enableCORS(handlers.GetCardsHandler(db)))
 	mux.HandleFunc("PUT /cards/{id}", enableCORS(handlers.UpdateCardHandler(db)))
@@ -40,7 +39,6 @@ func main() {
 	mux.HandleFunc("GET /repeat", enableCORS(handlers.GetCardsForReviewHandler(db)))
 	mux.HandleFunc("POST /repeat/{id}", enableCORS(handlers.RepeatCardHandler(db)))
 
-	// Serve frontend
 	mux.HandleFunc("/", serveFrontend)
 
 	log.Println("Server start at http://localhost:8080")

@@ -4,36 +4,44 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"reccal_flow/internal/config"
+	"os"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
+func GetDatabasePath() string {
+	if path := os.Getenv("RECALL_FLOW_DB"); path != "" {
+		return path
+	}
+
+	return "./recall_flow.db"
+}
+
 func InitDB() (*sql.DB, error) {
-	log.Println("InitDB: Инициализация SQLite БД")
+	log.Println("InitDB: Starting database initialization")
 	
-	dbPath := config.GetDatabasePath()
-	log.Printf("InitDB: Использование БД: %s", dbPath)
+	dbPath := GetDatabasePath()
+	log.Printf("InitDB: Using database path: %s", dbPath)
 
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка подключения к БД: %v", err)
+		return nil, fmt.Errorf("mistake to connection to DB: %v", err)
 	}
 
-	// Включить foreign keys для SQLite
+	// on foreign keys for SQLite
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return nil, fmt.Errorf("ошибка при включении foreign keys: %v", err)
+		return nil, fmt.Errorf("mistake to enable foreign keys: %v", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("ошибка при проверке подключения: %v", err)
+		return nil, fmt.Errorf("mistake to ping DB: %v", err)
 	}
 
 	if err := CreateTables(db); err != nil {
-		return nil, fmt.Errorf("ошибка при создании таблиц: %v", err)
+		return nil, fmt.Errorf("mistake to create tables: %v", err)
 	}
 
-	log.Println("InitDB: БД успешно инициализирована")
+	log.Println("InitDB: DB initialization completed successfully")
 	return db, nil
 }
 
@@ -83,8 +91,6 @@ func CreateTables(db *sql.DB) error {
 			break
 		}
 	}
-
-	// Если колонка отсутствует, добавляем её
 	if !hasUpdatedAt {
 		altQuery := `ALTER TABLE card ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`
 		_, err := db.Exec(altQuery)

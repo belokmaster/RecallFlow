@@ -1,0 +1,9 @@
+services:
+  recallflow:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      RECALL_FLOW_DB: /data/recall_flow.db
+    volumes:
+      - ./data:/data

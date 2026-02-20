@@ -44,7 +44,7 @@ function RepeatCards({ onBack }) {
       })
 
       if (res.ok) {
-        setFeedback(success ? '✓ Верно!' : '✗ Неправильно')
+        setFeedback(success ? 'Верно!' : 'Неправильно')
         setTimeout(() => {
           setFeedback(null)
           setCurrentIndex(currentIndex + 1)
@@ -70,7 +70,7 @@ function RepeatCards({ onBack }) {
     return (
       <div className="repeat-container">
         <div className="error">{error}</div>
-        <button className="btn-back" onClick={onBack}>← Назад</button>
+        <button className="btn-back" onClick={onBack}>Назад</button>
       </div>
     )
   }
@@ -79,10 +79,10 @@ function RepeatCards({ onBack }) {
     return (
       <div className="repeat-container">
         <div className="empty-state">
-          <div className="empty-icon">🎉</div>
+          <div className="empty-icon">...</div>
           <h3>Все карточки повторены!</h3>
           <p>Отличная работа! Все доступные карточки повторены.</p>
-          <button className="btn-action" onClick={onBack}>← Вернуться к карточкам</button>
+          <button className="btn-action" onClick={onBack}>Вернуться к карточкам</button>
         </div>
       </div>
     )
@@ -92,10 +92,10 @@ function RepeatCards({ onBack }) {
     return (
       <div className="repeat-container">
         <div className="empty-state">
-          <div className="empty-icon">✨</div>
+          <div className="empty-icon">...</div>
           <h3>Сессия завершена!</h3>
           <p>Отличная работа! Вы повторили {cards.length} карточек.</p>
-          <button className="btn-action" onClick={onBack}>← Вернуться к карточкам</button>
+          <button className="btn-action" onClick={onBack}>Вернуться к карточкам</button>
         </div>
       </div>
     )
@@ -107,7 +107,7 @@ function RepeatCards({ onBack }) {
   return (
     <div className="repeat-container">
       <div className="repeat-header">
-        <button className="btn-back" onClick={onBack}>← Назад</button>
+        <button className="btn-back" onClick={onBack}>Назад</button>
         <div className="progress-bar">
           <div className="progress-fill" style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}></div>
         </div>
